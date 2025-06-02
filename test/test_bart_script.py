@@ -2,7 +2,6 @@ import os
 
 import numpy as np
 import torch
-from torch import nn
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.models.bart.modeling_bart import BartSdpaAttention
 
@@ -24,9 +23,7 @@ class EncoderWrapper(torch.nn.Module):
         super().__init__()
         self.encoder = encoder
 
-    def forward(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         outs = self.encoder(input_ids, attention_mask)
         return outs["last_hidden_state"]
 
@@ -40,7 +37,7 @@ inputs = tokenizer(text, return_tensors="pt")
 input_ids = inputs["input_ids"]
 attention_mask = inputs["attention_mask"]
 
-input_names = ["input_ids"]# ["input_ids", "attention_mask"]
+input_names = ["input_ids"]
 output_names = ["encoder_output"]
 
 onnx_path = "bart_model.onnx"
@@ -49,25 +46,18 @@ print(model)
 
 torch.onnx.export(
     model,
-    (input_ids,),# , attention_mask),
+    (input_ids,),
     onnx_path,
     export_params=True,
     input_names=input_names,
     output_names=output_names,
-    # dynamic_shapes={
-    #    "input_ids": {0: "batch_size", 1: "sequence_length"},
-    #     "attention_mask": {0: "batch_size", 1: "sequence_length"},
-    #},
     dynamic_axes={
         "input_ids": {0: "batch_size", 1: "sequence_length"},
-         # "attention_mask": {0: "batch_size", 1: "sequence_length"},
         "encoder_output": {0: "batch_size", 1: "sequence_length"},
     },
     opset_version=20,
-    # dynamo=True,
     # NOTE: deprecated in latest versions (torch > 2.6) https://docs.pytorch.org/docs/stable/onnx_torchscript.html
-    # export_modules_as_functions=True,
-    export_modules_as_functions={BartSdpaAttention}# nn.MultiheadAttention, torch.nn.functional.scaled_dot_product_attention}
+    export_modules_as_functions={BartSdpaAttention},
 )
 print(f"BART encoder exported to {onnx_path}")
 
