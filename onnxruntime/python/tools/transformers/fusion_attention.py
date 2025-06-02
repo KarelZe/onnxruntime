@@ -889,6 +889,7 @@ class FusionAttention(Fusion):
         normalize_node = node
         start_node = normalize_node
         if normalize_node.op_type == "LayerNormalization":
+            # MB: ok (match Add node before LayerNormalization)
             add_before_layernorm = self.model.match_parent(normalize_node, "Add", 0)
             if add_before_layernorm is not None:
                 start_node = add_before_layernorm
@@ -896,6 +897,7 @@ class FusionAttention(Fusion):
                 return
 
         # SkipLayerNormalization has two inputs, and one of them is the root input for attention.
+        # MB: ok, find last piece of attention mechanism.
         qkv_nodes = self.model.match_parent_path(
             start_node,
             ["Add", "MatMul", "Reshape", "Transpose", "MatMul"],
@@ -903,7 +905,9 @@ class FusionAttention(Fusion):
         )
         einsum_node = None
         if qkv_nodes is not None:
+            # MB, ok. Just unpack
             (_, _, reshape_qkv, transpose_qkv, matmul_qkv) = qkv_nodes
+        # MB, probably not important
         else:
             # Match Albert
             qkv_nodes = self.model.match_parent_path(
@@ -913,7 +917,7 @@ class FusionAttention(Fusion):
                 (_, einsum_node, transpose_qkv, matmul_qkv) = qkv_nodes
             else:
                 return
-
+        # MB, probably just layer normalization output. Guess there must be exactly one other input.
         other_inputs = []
         for _i, node_input in enumerate(start_node.input):
             if node_input not in output_name_to_node:
@@ -927,6 +931,7 @@ class FusionAttention(Fusion):
 
         root_input = other_inputs[0]
 
+        # MB, probably irrelevant.
         # Match flaubert                     Mask
         #                                     |
         # Mul --> LayerNormalization -->  Attention --> MatMul --> Add
@@ -961,6 +966,7 @@ class FusionAttention(Fusion):
         #  |                                                                     |
         #  |                                                                     |
         #  +---------------------------------------------------------------------+
+        # MB: ok, probably not really important.
         parent_node = output_name_to_node[root_input]
         if parent_node.op_type == "SkipLayerNormalization" and len(parent_node.output) == 4:
             root_input = parent_node.output[0]
@@ -986,6 +992,7 @@ class FusionAttention(Fusion):
             "path3": (["Softmax", "Where", "MatMul", "Div"], [0, 0, 2, 0]),
             "path4": (["Softmax", "Add", "Where", "MatMul"], [0, 0, 0, 2]),
             "path5": (["Softmax", "Div", "MatMul"], [0, 0, 0]),
+            # MB probably relevant. Start after softmax and go up. We chhoose left node.
             "sdpa": (["Softmax", "Add", "MatMul", "Mul", "Sqrt"], [0, 0, None, 0, 1]),
         }
 
@@ -1000,6 +1007,7 @@ class FusionAttention(Fusion):
                 is_distill_add = True
             elif k == "path5":
                 is_no_mask_attention = True
+            # MB, probably our case.
             elif k == "sdpa":
                 is_sdpa = True
             break
@@ -1026,6 +1034,7 @@ class FusionAttention(Fusion):
         after_q = after_q or matmul_qk
         q_nodes = self.model.match_parent_path(after_q, ["Transpose", "Reshape", "Add", "MatMul"], [0, 0, 0, None])
         if q_nodes is None:
+            # MB, ok. We should match this path.
             q_nodes = self.model.match_parent_path(
                 after_q,
                 ["Div", "Transpose", "Reshape", "Add", "MatMul"],
@@ -1039,6 +1048,7 @@ class FusionAttention(Fusion):
         matmul_q = q_nodes[-1]
 
         after_k = matmul_qk
+        # MB, ok.
         if is_sdpa:
             mul_k_nodes = self.model.match_parent_path(matmul_qk, ["Mul", "Sqrt"], [1, None])
             if mul_k_nodes is None:
@@ -1046,9 +1056,11 @@ class FusionAttention(Fusion):
                 return
             (after_k, _) = mul_k_nodes
 
+        # MB, ok. But wondering why matching works.
         k_nodes = self.model.match_parent_path(
             after_k, ["Transpose", "Reshape", "Add", "MatMul"], [0 if is_sdpa else 1, 0, 0, None]
         )
+        # probably not important.
         if k_nodes is None:
             k_nodes = self.model.match_parent_path(
                 matmul_qk,
@@ -1091,6 +1103,7 @@ class FusionAttention(Fusion):
         elif is_no_mask_attention:
             pass
         else:
+            # MB, we probably match the last path.
             _, mask_nodes, _ = self.model.match_parent_paths(
                 add_qk,
                 [

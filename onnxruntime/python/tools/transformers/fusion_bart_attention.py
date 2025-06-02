@@ -82,11 +82,14 @@ class FusionBartAttention(FusionAttention):
         matmul_qk,
         add_q,
     ):
-        reshape_qkv_path = self.model.match_parent_path(
-            reshape_qkv_2, ["Concat", "Slice", "Shape", "Transpose"], [1, 0, 0, 0]
+        reshape_qkv_2_path = self.model.match_parent_path(
+            reshape_qkv_2, ["Concat", "Slice", "Gather", "Shape"], [1, 0, 0, 0]
         )
-        if reshape_qkv_path is None or reshape_qkv_path[-1].input[0] != matmul_qkv.output[0]:
+        if reshape_qkv_2_path is None:
             return False
+        else:
+            if reshape_qkv_2_path[-1].input[0] != matmul_qkv.output[0]:
+                return False
 
         matmul_qk_path_1 = self.model.match_parent_path(
             matmul_qk, ["Mul", "Pow", "Cast", "Div", "Gather", "Shape"], [0, 1, 0, 0, 0, 0]
@@ -128,25 +131,39 @@ class FusionBartAttention(FusionAttention):
         # Track if fusion is occurring for OpenAI implementation of Whisper
         model_impl_openai = False
 
+        self.model.save_model_to_file("bart_fuse_attention_before.onnx")
+
         # SkipLayerNormalization has two inputs, and one of them is the root input for attention.
         qkv_nodes = self.model.match_parent_path(
             normalize_node,
-            ["Add", "MatMul", "Reshape", "Transpose", "Reshape", "MatMul"],
-            [1, 1, 0, 0, 0, 0],
+            # mb
+            # ["Add", "MatMul", "Reshape", "Transpose", "Reshape", "MatMul"],
+            # [1, 1, 0, 0, 0, 0],
+            ["Add", "MatMul", "Reshape", "Transpose", "MatMul", "Transpose", "Reshape"],
+            [1, 1, 0, 0, 0, None, None],
         )
         qkv_nodes_openai = self.model.match_parent_path(
             normalize_node,
             ["Add", "MatMul", "Reshape", "Transpose", "MatMul"],
             [1, 1, 0, 0, 0],
         )
+        print("qkv_nodes:", qkv_nodes, "normalize_node:", normalize_node.name)
+        print("==="*8)
+
         if qkv_nodes is not None:
             (
-                add_out,
-                matmul_out,
+                # mb (2 lines)
+                # add_out,
+                # matmul_out,
+                _, _,
                 reshape_qkv_2,
                 transpose_qkv,
-                reshape_qkv_1,
+                # mb
+                # reshape_qkv_1,
                 matmul_qkv,
+                # mb (2 lines)
+                _,
+                reshape_qkv_1,
             ) = qkv_nodes
         elif qkv_nodes_openai is not None:
             qkv_nodes = qkv_nodes_openai
@@ -172,6 +189,8 @@ class FusionBartAttention(FusionAttention):
         if len(other_inputs) != 1:
             return
         root_input = other_inputs[0]
+
+        print("qkv_nodes", qkv_nodes)
 
         # Sometimes the input name to the attention MatMul nodes does not match the input name to the end
         # SkipLayerNormalization node (name saved in root_input). We find the true input name to the MatMul
@@ -201,11 +220,20 @@ class FusionBartAttention(FusionAttention):
         graph_input_names = {node.name for node in self.model.graph().input}
         graph_output_names = {node.name for node in self.model.graph().output}
 
+        print("reached matmul breakpoint")
+        print("*"*8)
+        print("matmul_qkv", matmul_qkv)
+
         v_nodes = self.model.match_parent_path(
             matmul_qkv,
-            ["Reshape", "Transpose", "Reshape", "Add", "MatMul"],
-            [1, 0, 0, 0, None],
+            #["Reshape", "Transpose", "Reshape", "Add", "MatMul"],
+            #[1, 0, 0, 0, None],
+            # mb (2 lines), note open ai and transformers is no identical.
+            ["Transpose", "Reshape", "Add", "MatMul"],
+            [1, 0, 0, None],
         )
+        print("v_nodes", v_nodes)
+
         v_nodes_openai = self.model.match_parent_path(
             matmul_qkv,
             ["Transpose", "Reshape", "Add", "MatMul"],
@@ -230,8 +258,16 @@ class FusionBartAttention(FusionAttention):
         )
         past_v, present_v = "", ""
         reshape_v_2, add_v = None, None
+        # if v_nodes is not None:
+
+        print("###")
+        print("assortment of v_nodes")
+        print(v_nodes, v_nodes_openai, v_nodes_with_past_self_attn, v_nodes_with_past_cross_attn)
+
         if v_nodes is not None:
-            (reshape_v_2, transpose_v, reshape_v_1, add_v, matmul_v) = v_nodes
+            # (reshape_v_2, transpose_v, reshape_v_1, add_v, matmul_v) = v_nodes
+            # mb (1 line)
+            (transpose_v, reshape_v_1, add_v, matmul_v) = v_nodes
             # For initial pass through encoder-decoder_with_past to get starting past values (beam search)
             present_v = transpose_v.output[0]
         elif v_nodes_openai is not None:
@@ -250,6 +286,9 @@ class FusionBartAttention(FusionAttention):
                 ["Reshape", "Transpose"],
                 exclude=[reshape_v_1],
             )
+            print("#"*8)
+            print("reshape_path", reshape_path)
+
             # For decoder attention types
             # add_v_node                     Reshape <- Transpose <-Past_V
             #           \                  /
@@ -298,6 +337,8 @@ class FusionBartAttention(FusionAttention):
                 )
                 present_v = identity_node_v[0].output[0] if len(identity_node_v) == 1 else ""
         else:
+            # mb
+            print("fuse_attention: failed to match v nodes")
             logger.debug("fuse_attention: failed to match v path")
             return
         past_v = past_v if past_v in graph_input_names else ""
@@ -307,7 +348,11 @@ class FusionBartAttention(FusionAttention):
         qk_nodes_2 = self.model.match_parent_path(
             matmul_qkv, ["Softmax", "Reshape", "Add", "Reshape", "MatMul"], [0, 0, 0, 0, 0]
         )
+        print("#"*8)
+        print("qk_nodes_1", qk_nodes_1, "qk_nodes_2", qk_nodes_2)
+
         qk_nodes_2_openai = self.model.match_parent_path(matmul_qkv, ["Softmax", "Add", "MatMul"], [0, 0, 0])
+        print("qk_nodes_2_openai", qk_nodes_2_openai)
         add_qk = None
         if qk_nodes_1 is not None:
             _, matmul_qk = qk_nodes_1
@@ -315,6 +360,7 @@ class FusionBartAttention(FusionAttention):
         elif qk_nodes_2 is not None:
             _, _, add_qk, _, matmul_qk = qk_nodes_2
             qk_nodes = qk_nodes_2
+        # mb this seems to be relevant for transformers.
         elif qk_nodes_2_openai is not None:
             _, add_qk, matmul_qk = qk_nodes_2_openai
             qk_nodes = qk_nodes_2_openai
@@ -331,6 +377,11 @@ class FusionBartAttention(FusionAttention):
             ["Mul", "Transpose", "Reshape", "Add", "MatMul"],
             [0, 0, 0, 0, 1],
         )
+
+        print("*"*8)
+        print("q_nodes", q_nodes, "q_nodes_openai", q_nodes_openai)
+
+        # again q_nodes_openai are matched.
         reshape_q_2 = None
         if q_nodes is not None:
             reshape_q_2, transpose_q, reshape_q_1, mul_q, add_q, matmul_q = q_nodes
@@ -342,14 +393,17 @@ class FusionBartAttention(FusionAttention):
 
         k_nodes_with_bias = self.model.match_parent_path(
             matmul_qk,
-            ["Transpose", "Reshape", "Transpose", "Reshape", "Add", "MatMul"],
-            [1, 0, 0, 0, 0, 1],
-        )
-        k_nodes_no_bias_openai = self.model.match_parent_path(
+            # mb (changed these lines)
+            #["Transpose", "Reshape", "Transpose", "Reshape", "Add", "MatMul"],
+            #[1, 0, 0, 0, 0, 1],
+            ["Mul", "Transpose", "Reshape", "Add", "MatMul"],
+            [1, 0, 0, 0, 1]        )
+        k_nodes_with_bias_openai = self.model.match_parent_path(
             matmul_qk,
             ["Mul", "Transpose", "Reshape", "MatMul"],
             [1, 0, 0, 0],
         )
+        # FIXME: We'll have to fix these too!
         k_nodes_no_bias = self.model.match_parent_path(
             matmul_qk,
             ["Transpose", "Reshape", "Transpose", "Reshape", "MatMul"],
@@ -373,14 +427,21 @@ class FusionBartAttention(FusionAttention):
             ["Mul", "Transpose", "Reshape", "Reshape", "Transpose"],
             [1, 0, 0, 0, 0],
         )
+        print("..."*8)
+        print("assortment of k_nodes")
+        print(k_nodes_with_bias, k_nodes_with_bias_openai, k_nodes_no_bias, k_nodes_no_bias_with_past_self_attn, )
+
         past_k, present_k = "", ""
         reshape_k_2, reshape_k_1, matmul_k = None, None, None
         if k_nodes_with_bias is not None:
-            _, reshape_k_2, transpose_k_1, reshape_k_1, add_k, matmul_k = k_nodes_with_bias
+             # ["Mul", "Transpose", "Reshape", "Add", "MatMul"],
+            _, transpose_k_1, reshape_k_1, add_k, matmul_k = k_nodes_with_bias
+            # mb
+            # _, reshape_k_2, transpose_k_1, reshape_k_1, add_k, matmul_k = k_nodes_with_bias
             k_nodes = k_nodes_with_bias
-        elif k_nodes_no_bias_openai is not None:
-            mul_k, transpose_k_1, reshape_k_1, matmul_k = k_nodes_no_bias_openai
-            k_nodes = k_nodes_no_bias_openai
+        elif k_nodes_with_bias_openai is not None:
+            mul_k, transpose_k_1, reshape_k_1, matmul_k = k_nodes_with_bias_openai
+            k_nodes = k_nodes_with_bias_openai
             present_k = matmul_k.output[0]
 
             # Find the child path to access the correct present_k values
@@ -400,7 +461,7 @@ class FusionBartAttention(FusionAttention):
             #             \              /
             #               -> Concat <-
             #                    |
-            #                    +--> Reshape -> Transpose -> Present_K
+            #                    |--> Reshape -> Transpose -> Present_K
             concat_path = self.model.match_child_path(matmul_k, ["Concat", "Reshape", "Transpose"])
             if reshape_path is not None:
                 (_, transpose_matmul_k) = reshape_path
@@ -449,10 +510,13 @@ class FusionBartAttention(FusionAttention):
                 present_k = identity_node_k[0].output[0] if len(identity_node_k) == 1 else ""
         else:
             return
+
+        print("new breakpoint reached (past/present)")
+
         past_k = past_k if past_k in graph_input_names else ""
         present_k = present_k if present_k in graph_output_names else ""
 
-        if k_nodes in (k_nodes_no_bias_openai, k_nodes_no_bias, k_nodes_no_bias_with_past_self_attn):
+        if k_nodes in (k_nodes_with_bias_openai, k_nodes_no_bias, k_nodes_no_bias_with_past_self_attn):
             # Create empty Add node for attention graph
             bias_dim = self.model.get_initializer(add_v.input[0]).dims[0]
             empty_bias_name = "empty_bias"
@@ -470,7 +534,7 @@ class FusionBartAttention(FusionAttention):
 
         if (
             model_impl_openai
-            and not bool(past_k)
+            and not past_k
             and not self.check_runtime_shape_path_openai(
                 reshape_qkv_2,
                 matmul_qkv,
@@ -482,19 +546,24 @@ class FusionBartAttention(FusionAttention):
             return
         elif (
             not model_impl_openai
-            and not bool(past_k)
-            and not self.check_runtime_shape_path(
-                reshape_qkv_2,
-                reshape_qkv_1,
-                reshape_q_2,
-                reshape_k_2,
-                reshape_v_2,
-                root_input,
-            )
+            and not past_k
+            # mb (nex lines)
+            and False
+            # and not self.check_runtime_shape_path(
+            #     reshape_qkv_2,
+            #     reshape_qkv_1,
+            #     reshape_q_2,
+            #     reshape_k_2,
+            #     reshape_v_2,
+            #     root_input,
+            # )
         ):
             return
 
-        three_root_inputs = bool(past_k) and bool(past_v) and matmul_k is None and "matmul_v" not in locals()
+        print("final breakpoint reached")
+        print("line 562 :-D")
+
+        three_root_inputs = past_k and past_v and matmul_k is None and "matmul_v" not in locals()
         one_root_input = (
             not three_root_inputs
             and matmul_k.input[0] == root_input
@@ -517,13 +586,13 @@ class FusionBartAttention(FusionAttention):
         encoder_attention = one_root_input and qk_nodes == qk_nodes_1
         decoder_attention = one_root_input and qk_nodes in (qk_nodes_2, qk_nodes_2_openai)
         decoder_attention_with_past = (
-            (encoder_attention if not model_impl_openai else decoder_attention) and bool(past_k) and bool(past_v)
+            (encoder_attention if not model_impl_openai else decoder_attention) and past_k and past_v
         )
         decoder_cross_attention = two_root_inputs and qk_nodes == qk_nodes_1
         decoder_cross_attention_with_past = three_root_inputs and qk_nodes == qk_nodes_1
 
         # For decoder_attention, the attention mask needs to be included in the attention node
-        mask_index, mask_nodes = None, []
+        mask_index = None
         if decoder_attention:
             mask_nodes_bart = self.model.match_parent_path(
                 add_qk,
@@ -537,10 +606,8 @@ class FusionBartAttention(FusionAttention):
             )
             if mask_nodes_whisper is not None:
                 mask_index = mask_nodes_whisper[0].output[-1]
-                mask_nodes = mask_nodes_whisper
             elif mask_nodes_bart is not None:
                 mask_index = mask_nodes_bart[0].output[-1]
-                mask_nodes = mask_nodes_bart
 
         if (
             encoder_attention
@@ -572,7 +639,6 @@ class FusionBartAttention(FusionAttention):
                         num_heads=num_heads,
                         hidden_size=hidden_size,
                         output=attention_last_node.output[0],
-                        unidirectional=decoder_attention_with_past,
                         past_k=past_k if decoder_attention_with_past else "",
                         past_v=past_v if decoder_attention_with_past else "",
                         present_k=present_k,
@@ -599,14 +665,11 @@ class FusionBartAttention(FusionAttention):
                     hidden_size=hidden_size,
                     first_input=root_input,
                     output=attention_last_node.output[0],
-                    add_qk_str=(
-                        None if len(mask_nodes) > 1 else add_qk_str
-                    ),  # deprecate and use is_unidirectional attr instead for Whisper
+                    add_qk_str=add_qk_str,
                     past_k=past_k,
                     past_v=past_v,
                     present_k=present_k,
                     present_v=present_v,
-                    causal=decoder_attention,
                 )
                 self.use_multi_head_attention = use_multi_head_attention_ground_truth
             if new_node is None:
