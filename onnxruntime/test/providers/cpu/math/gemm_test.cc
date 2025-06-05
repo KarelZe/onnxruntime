@@ -23,78 +23,6 @@ const onnxruntime::RunOptions run_options = []() {
 
 const constexpr auto run_with_tunable_op = &run_options;
 
-// Helper function to initialize input matrices
-auto initialize_matrix = [](int64_t rows, int64_t cols) {
-  std::vector<float> data;
-  data.reserve(rows * cols);
-  for (int64_t i = 0; i < rows * cols; ++i) {
-    data.push_back(static_cast<float>((i % 7) + 1));
-  }
-  return data;
-};
-
-enum class BiasType {
-  noBias,      // No bias input
-  MBias,       // C shape is {M,1}
-  ScalarBias,  // C shape is {1,1}
-  MNBias,      // C shape is {M,N}
-  NBias        // C shape is {N}
-};
-
-// Helper function to initialize bias data for Gemm tests
-auto initialize_bias = [](BiasType bias_type, int64_t M, int64_t N) {
-  std::pair<std::vector<float>, std::vector<int64_t>> result;
-  auto& [data, shape] = result;
-
-  switch (bias_type) {
-    case BiasType::noBias:
-      break;
-    case BiasType::MBias:
-      shape = {M, 1};
-      for (int64_t i = 0; i < M; ++i) {
-        data.push_back(static_cast<float>((i % 7) + 1));
-      }
-      break;
-    case BiasType::ScalarBias:
-      shape = {1, 1};
-      data.push_back(1.0f);
-      break;
-    case BiasType::MNBias:
-      shape = {M, N};
-      for (int64_t i = 0; i < M * N; ++i) {
-        data.push_back(static_cast<float>((i % 7) + 1));
-      }
-      break;
-    case BiasType::NBias:
-      shape = {N};
-      for (int64_t i = 0; i < N; ++i) {
-        data.push_back(static_cast<float>((i % 7) + 1));
-      }
-      break;
-  }
-  return result;
-};
-
-// Helper function to get bias value for Gemm tests
-auto get_bias_value = [](const std::vector<float>& bias_data, BiasType bias_type, int64_t i, int64_t j, int64_t N) {
-  if (bias_data.empty()) return 0.0f;
-
-  switch (bias_type) {
-    case BiasType::noBias:
-      return 0.0f;
-    case BiasType::MBias:
-      return bias_data[i];
-    case BiasType::ScalarBias:
-      return bias_data[0];
-    case BiasType::MNBias:
-      return bias_data[i * N + j];
-    case BiasType::NBias:
-      return bias_data[j];
-    default:
-      return 0.0f;
-  }
-};
-
 }  // namespace
 
 // Only CUDA, ROCM, CoreML and XNNPack kernels have float 16 support
@@ -502,7 +430,6 @@ TYPED_TEST(GemmOpTypedTests, TestGemm2DBroadcast_2) {
                             {static_cast<TypeParam>(11.0f), static_cast<TypeParam>(12.0f), static_cast<TypeParam>(13.0f),
                              static_cast<TypeParam>(-9.0f), static_cast<TypeParam>(-8.0f), static_cast<TypeParam>(-7.0f)});
   test.Config(run_with_tunable_op)
-      .ConfigExcludeEps({kQnnExecutionProvider})  // Accuracy issues with QNN CPU backend since QNN 2.34
       .RunWithConfig();
 }
 
@@ -591,8 +518,10 @@ TYPED_TEST(GemmOpTypedTests, TestGemmBroadcast) {
     excluded_providers.insert(kOpenVINOExecutionProvider);  // OpenVINO: Temporarily disabled due to accuracy issues
 #endif
 
-    // Accuracy issues with QNN CPU backend since QNN 2.34
-    excluded_providers.insert(kQnnExecutionProvider);
+    if (b_is_initializer && !c_is_initializer) {
+      // Accuracy issues on QNN's CPU backend with QNN SDK version 2.17
+      excluded_providers.insert(kQnnExecutionProvider);
+    }
 
     test.ConfigExcludeEps(excluded_providers)
         .Config(run_with_tunable_op)
@@ -624,16 +553,10 @@ TYPED_TEST(GemmOpTypedTests, TestGemmTrans) {
   test.AddOutput<TypeParam>("Y", {2, 3},
                             {static_cast<TypeParam>(11.0f), static_cast<TypeParam>(11.0f), static_cast<TypeParam>(11.0f),
                              static_cast<TypeParam>(-9.0f), static_cast<TypeParam>(-9.0f), static_cast<TypeParam>(-9.0f)});
-
-  std::unordered_set<std::string> excluded_providers;
 #if defined(OPENVINO_CONFIG_GPU)
-  excluded_providers.insert(kOpenVINOExecutionProvider);  // OpenVINO: Temporarily disabled due to accuracy issues
+  test.ConfigExcludeEps({kOpenVINOExecutionProvider});  // OpenVINO: Temporarily disabled due to accuracy issues
 #endif
-  // Accuracy issues with QNN CPU backend since QNN 2.34
-  excluded_providers.insert(kQnnExecutionProvider);
-
-  test.ConfigExcludeEps(excluded_providers)
-      .Config(run_with_tunable_op)
+  test.Config(run_with_tunable_op)
       .RunWithConfig();
 }
 
@@ -656,15 +579,10 @@ TYPED_TEST(GemmOpTypedTests, TestGemmTransB) {
     test.AddOutput<TypeParam>("Y", {2, 3},
                               {static_cast<TypeParam>(11.0f), static_cast<TypeParam>(11.0f), static_cast<TypeParam>(11.0f),
                                static_cast<TypeParam>(-9.0f), static_cast<TypeParam>(-9.0f), static_cast<TypeParam>(-9.0f)});
-
-    std::unordered_set<std::string> excluded_providers;
 #if defined(OPENVINO_CONFIG_GPU)
-    excluded_providers.insert(kOpenVINOExecutionProvider);  // OpenVINO: Temporarily disabled due to accuracy issues
+    test.ConfigExcludeEps({kOpenVINOExecutionProvider});  // OpenVINO: Temporarily disabled due to accuracy issues
 #endif
-    excluded_providers.insert(kQnnExecutionProvider);  // Accuracy issues with QNN CPU backend since QNN 2.34
-
-    test.ConfigExcludeEps(excluded_providers)
-        .Config(run_with_tunable_op)
+    test.Config(run_with_tunable_op)
         .RunWithConfig();
   };
   run_test(false, false);
@@ -1038,26 +956,35 @@ TEST(GemmOpTest, SharedPrepackedWeights) {
 }
 #endif
 
-TEST(GemmOpTest, GemmOptimizePacked) {
-  auto run_test = [](int64_t M, int64_t K, int64_t N, BiasType bias_type) {
-    OpTester test("Gemm", 13);
+TEST(GemmOpTest, GemmOptimizeVec4) {
+  auto run_test = [](int64_t M, int64_t K, int64_t N) {
+    OpTester test("Gemm");
 
     test.AddAttribute("transA", (int64_t)0);
     test.AddAttribute("transB", (int64_t)0);
     test.AddAttribute("alpha", 1.0f);
     test.AddAttribute("beta", 1.0f);
 
-    std::vector<float> a_data = initialize_matrix(M, K);
-    std::vector<float> b_data = initialize_matrix(K, N);
+    // Matrix A: MxK filled with sequential numbers
+    std::vector<float> a_data;
+    a_data.reserve(M * K);
+    for (int64_t i = 0; i < M * K; ++i) {
+      a_data.push_back(static_cast<float>((i % 7) + 1));
+    }
 
-    auto [c_data, c_shape] = initialize_bias(bias_type, M, N);
-    bool has_bias = !c_data.empty();
+    // Matrix B: KxN filled with sequential numbers
+    std::vector<float> b_data;
+    b_data.reserve(K * N);
+    for (int64_t i = 0; i < K * N; ++i) {
+      b_data.push_back(static_cast<float>((i % 7) + 1));
+    }
+
+    // Matrix C: MxN filled with zeros
+    std::vector<float> c_data(M * N, 1.0f);
 
     test.AddInput<float>("A", {M, K}, a_data);
     test.AddInput<float>("B", {K, N}, b_data);
-    if (has_bias) {
-      test.AddInput<float>("C", c_shape, c_data);
-    }
+    test.AddInput<float>("C", {M, N}, c_data);
 
     // Calculate expected output
     std::vector<float> expected_data(M * N, 0.0f);
@@ -1067,53 +994,56 @@ TEST(GemmOpTest, GemmOptimizePacked) {
         for (int64_t k = 0; k < K; ++k) {
           sum += a_data[i * K + k] * b_data[k * N + j];
         }
-        expected_data[i * N + j] = sum + get_bias_value(c_data, bias_type, i, j, N);
+        expected_data[i * N + j] = sum + c_data[i * N + j];
       }
     }
 
     test.AddOutput<float>("Y", {M, N}, expected_data);
-    test.ConfigExcludeEps({kQnnExecutionProvider})
-        .Config(run_with_tunable_op)
+    test.Config(run_with_tunable_op)
         .RunWithConfig();
   };
 
-  // Test different matrix sizes with all bias types
-  std::vector<std::tuple<int64_t, int64_t, int64_t>> test_sizes = {
-      {32, 32, 32}, {64, 64, 64}, {60, 16, 92}, {8, 8, 8}, {128, 128, 128}, {128, 32, 64}, {96, 24, 48}, {48, 48, 120}, {72, 80, 84}, {33, 67, 99}, {1, 1, 1}, {31, 31, 31}};
+  run_test(60, 16, 92);
 
-  std::vector<BiasType> bias_types = {
-      BiasType::noBias, BiasType::MBias, BiasType::ScalarBias,
-      BiasType::MNBias, BiasType::NBias};
+  run_test(8, 8, 8);
+  run_test(128, 128, 128);
+  run_test(128, 32, 64);
+  run_test(4, 8, 12);
 
-  // Run tests with different combinations of matrix sizes and bias types
-  for (const auto& size : test_sizes) {
-    for (const auto& bias_type : bias_types) {
-      run_test(std::get<0>(size), std::get<1>(size), std::get<2>(size), bias_type);
-    }
-  }
+  run_test(96, 24, 48);
+  run_test(48, 48, 120);
+  run_test(72, 80, 84);
 }
 
-TEST(GemmOpTest, GemmOptimizePackedTransA) {
-  auto run_test = [](int64_t M, int64_t K, int64_t N, BiasType bias_type) {
-    OpTester test("Gemm", 13);
+TEST(GemmOpTest, GemmOptimizeVec4TransA) {
+  auto run_test = [](int64_t M, int64_t K, int64_t N) {
+    OpTester test("Gemm");
 
     test.AddAttribute("transA", (int64_t)1);  // A is transposed
     test.AddAttribute("transB", (int64_t)0);
     test.AddAttribute("alpha", 1.0f);
     test.AddAttribute("beta", 1.0f);
 
-    std::vector<float> a_data = initialize_matrix(K, M);
-    std::vector<float> b_data = initialize_matrix(K, N);
-
-    // Initialize bias with appropriate shape
-    auto [c_data, c_shape] = initialize_bias(bias_type, M, N);
-    bool has_bias = !c_data.empty();
-
-    test.AddInput<float>("A", {K, M}, a_data);
-    test.AddInput<float>("B", {K, N}, b_data);
-    if (has_bias) {
-      test.AddInput<float>("C", c_shape, c_data);
+    // Matrix A: KxM (will be transposed to MxK) filled with sequential numbers
+    std::vector<float> a_data;
+    a_data.reserve(M * K);
+    for (int64_t i = 0; i < K * M; ++i) {
+      a_data.push_back(static_cast<float>((i % 7) + 1));
     }
+
+    // Matrix B: KxN filled with sequential numbers
+    std::vector<float> b_data;
+    b_data.reserve(K * N);
+    for (int64_t i = 0; i < K * N; ++i) {
+      b_data.push_back(static_cast<float>((i % 7) + 1));
+    }
+
+    // Matrix C: MxN filled with zeros
+    std::vector<float> c_data(M * N, 1.0f);
+
+    test.AddInput<float>("A", {K, M}, a_data);  // Note dimensions are swapped
+    test.AddInput<float>("B", {K, N}, b_data);
+    test.AddInput<float>("C", {M, N}, c_data);
 
     // Calculate expected output for transposed A
     std::vector<float> expected_data(M * N, 0.0f);
@@ -1121,109 +1051,115 @@ TEST(GemmOpTest, GemmOptimizePackedTransA) {
       for (int64_t j = 0; j < N; ++j) {
         float sum = 0.0f;
         for (int64_t k = 0; k < K; ++k) {
-          sum += a_data[k * M + i] * b_data[k * N + j];
+          sum += a_data[k * M + i] * b_data[k * N + j];  // Adjusted index for transposed A
         }
-        expected_data[i * N + j] = sum + get_bias_value(c_data, bias_type, i, j, N);
+        expected_data[i * N + j] = sum + c_data[i * N + j];
       }
     }
 
     test.AddOutput<float>("Y", {M, N}, expected_data);
-    test.ConfigExcludeEps({kQnnExecutionProvider})
-        .Config(run_with_tunable_op)
+    test.Config(run_with_tunable_op)
         .RunWithConfig();
   };
 
-  std::vector<std::tuple<int64_t, int64_t, int64_t>> test_sizes = {
-      {32, 32, 32}, {64, 64, 64}, {60, 16, 92}, {8, 8, 8}, {128, 128, 128}, {128, 32, 64}, {96, 24, 48}, {48, 48, 120}, {72, 80, 84}, {33, 67, 99}, {1, 1, 1}, {31, 31, 31}, {2, 3, 4}, {63, 64, 65}, {129, 129, 129}};
-
-  std::vector<BiasType> bias_types = {
-      BiasType::noBias, BiasType::MBias, BiasType::ScalarBias,
-      BiasType::MNBias, BiasType::NBias};
-
-  // Run tests with different combinations
-  for (const auto& size : test_sizes) {
-    for (const auto& bias_type : bias_types) {
-      run_test(std::get<0>(size), std::get<1>(size), std::get<2>(size), bias_type);
-    }
-  }
+  run_test(60, 16, 92);
+  run_test(8, 8, 8);
+  run_test(128, 128, 128);
+  run_test(128, 32, 64);
+  run_test(4, 8, 12);
+  run_test(96, 24, 48);
+  run_test(48, 48, 120);
+  run_test(72, 80, 84);
 }
 
-TEST(GemmOpTest, GemmOptimizePackedTransB) {
-  auto run_test = [](int64_t M, int64_t K, int64_t N, BiasType bias_type) {
-    OpTester test("Gemm", 13);
+TEST(GemmOpTest, GemmOptimizeVec4TransB) {
+  auto run_test = [](int64_t M, int64_t K, int64_t N) {
+    OpTester test("Gemm");
 
     test.AddAttribute("transA", (int64_t)0);
-    test.AddAttribute("transB", (int64_t)1);
+    test.AddAttribute("transB", (int64_t)1);  // B is transposed
     test.AddAttribute("alpha", 1.0f);
     test.AddAttribute("beta", 1.0f);
 
-    std::vector<float> a_data = initialize_matrix(M, K);
-    std::vector<float> b_data = initialize_matrix(N, K);
-
-    // Initialize bias with appropriate shape
-    auto [c_data, c_shape] = initialize_bias(bias_type, M, N);
-    bool has_bias = !c_data.empty();
-
-    test.AddInput<float>("A", {M, K}, a_data);
-    test.AddInput<float>("B", {N, K}, b_data);
-    if (has_bias) {
-      test.AddInput<float>("C", c_shape, c_data);
+    // Matrix A: MxK filled with sequential numbers
+    std::vector<float> a_data;
+    a_data.reserve(M * K);
+    for (int64_t i = 0; i < M * K; ++i) {
+      a_data.push_back(static_cast<float>((i % 7) + 1));
     }
 
-    // Calculate expected output
+    // Matrix B: NxK (will be transposed to KxN) filled with sequential numbers
+    std::vector<float> b_data;
+    b_data.reserve(K * N);
+    for (int64_t i = 0; i < N * K; ++i) {
+      b_data.push_back(static_cast<float>((i % 7) + 1));
+    }
+
+    // Matrix C: MxN filled with zeros
+    std::vector<float> c_data(M * N, 1.0f);
+
+    test.AddInput<float>("A", {M, K}, a_data);
+    test.AddInput<float>("B", {N, K}, b_data);  // Note dimensions are swapped
+    test.AddInput<float>("C", {M, N}, c_data);
+
+    // Calculate expected output for transposed B
     std::vector<float> expected_data(M * N, 0.0f);
     for (int64_t i = 0; i < M; ++i) {
       for (int64_t j = 0; j < N; ++j) {
         float sum = 0.0f;
         for (int64_t k = 0; k < K; ++k) {
-          sum += a_data[i * K + k] * b_data[j * K + k];
+          sum += a_data[i * K + k] * b_data[j * K + k];  // Adjusted index for transposed B
         }
-        expected_data[i * N + j] = sum + get_bias_value(c_data, bias_type, i, j, N);
+        expected_data[i * N + j] = sum + c_data[i * N + j];
       }
     }
 
     test.AddOutput<float>("Y", {M, N}, expected_data);
-    test.ConfigExcludeEps({kQnnExecutionProvider})
-        .Config(run_with_tunable_op)
+    test.Config(run_with_tunable_op)
         .RunWithConfig();
   };
 
-  std::vector<std::tuple<int64_t, int64_t, int64_t>> test_sizes = {
-      {32, 32, 32}, {64, 64, 64}, {60, 16, 92}, {8, 8, 8}, {128, 128, 128}, {128, 32, 64}, {96, 24, 48}, {48, 48, 120}, {72, 80, 84}, {33, 67, 99}, {1, 1, 1}, {31, 31, 31}, {2, 3, 4}, {63, 64, 65}, {129, 129, 129}};
-
-  std::vector<BiasType> bias_types = {
-      BiasType::noBias, BiasType::MBias, BiasType::ScalarBias,
-      BiasType::MNBias, BiasType::NBias};
-
-  // Run tests with different combinations
-  for (const auto& size : test_sizes) {
-    for (const auto& bias_type : bias_types) {
-      run_test(std::get<0>(size), std::get<1>(size), std::get<2>(size), bias_type);
-    }
-  }
+  run_test(32, 32, 32);
+  run_test(60, 16, 92);
+  run_test(8, 8, 8);
+  run_test(64, 64, 64);
+  run_test(128, 128, 128);
+  run_test(128, 32, 64);
+  run_test(4, 8, 12);
+  run_test(96, 24, 48);
+  run_test(48, 48, 120);
+  run_test(72, 80, 84);
 }
 
-TEST(GemmOpTest, GemmOptimizePackedTransAB) {
-  auto run_test = [](int64_t M, int64_t K, int64_t N, BiasType bias_type) {
-    OpTester test("Gemm", 13);
+TEST(GemmOpTest, GemmOptimizeVec4TransAB) {
+  auto run_test = [](int64_t M, int64_t K, int64_t N) {
+    OpTester test("Gemm");
 
-    test.AddAttribute("transA", (int64_t)1);
-    test.AddAttribute("transB", (int64_t)1);
+    test.AddAttribute("transA", (int64_t)1);  // A is transposed
+    test.AddAttribute("transB", (int64_t)1);  // B is transposed
     test.AddAttribute("alpha", 1.0f);
     test.AddAttribute("beta", 1.0f);
 
-    std::vector<float> a_data = initialize_matrix(M, K);
-    std::vector<float> b_data = initialize_matrix(N, K);
-
-    // Initialize bias with appropriate shape
-    auto [c_data, c_shape] = initialize_bias(bias_type, M, N);
-    bool has_bias = !c_data.empty();
-
-    test.AddInput<float>("A", {K, M}, a_data);
-    test.AddInput<float>("B", {N, K}, b_data);
-    if (has_bias) {
-      test.AddInput<float>("C", c_shape, c_data);
+    // Matrix A: KxM (will be transposed to MxK) filled with sequential numbers
+    std::vector<float> a_data;
+    a_data.reserve(M * K);
+    for (int64_t i = 0; i < K * M; ++i) {
+      a_data.push_back(static_cast<float>((i % 7) + 1));
     }
+
+    // Matrix B: NxK (will be transposed to KxN) filled with sequential numbers
+    std::vector<float> b_data;
+    b_data.reserve(K * N);
+    for (int64_t i = 0; i < N * K; ++i) {
+      b_data.push_back(static_cast<float>((i % 7) + 1));
+    }
+
+    // Matrix C: MxN filled with zeros
+    std::vector<float> c_data(M * N, 1.0f);
+
+    test.AddInput<float>("A", {K, M}, a_data);  // Note dimensions are swapped
+    test.AddInput<float>("B", {N, K}, b_data);  // Note dimensions are swapped
+    test.AddInput<float>("C", {M, N}, c_data);
 
     // Calculate expected output for both matrices transposed
     std::vector<float> expected_data(M * N, 0.0f);
@@ -1231,31 +1167,25 @@ TEST(GemmOpTest, GemmOptimizePackedTransAB) {
       for (int64_t j = 0; j < N; ++j) {
         float sum = 0.0f;
         for (int64_t k = 0; k < K; ++k) {
-          sum += a_data[k * M + i] * b_data[j * K + k];
+          sum += a_data[k * M + i] * b_data[j * K + k];  // Adjusted indices for both transposed
         }
-        expected_data[i * N + j] = sum + get_bias_value(c_data, bias_type, i, j, N);
+        expected_data[i * N + j] = sum + c_data[i * N + j];
       }
     }
 
     test.AddOutput<float>("Y", {M, N}, expected_data);
-    test.ConfigExcludeEps({kQnnExecutionProvider})
-        .Config(run_with_tunable_op)
+    test.Config(run_with_tunable_op)
         .RunWithConfig();
   };
-
-  std::vector<std::tuple<int64_t, int64_t, int64_t>> test_sizes = {
-      {32, 32, 32}, {64, 64, 64}, {60, 16, 92}, {8, 8, 8}, {128, 128, 128}, {128, 32, 64}, {96, 24, 48}, {48, 48, 120}, {72, 80, 84}, {33, 67, 99}, {1, 1, 1}, {31, 31, 31}, {2, 3, 4}, {63, 64, 65}, {64, 64, 65}, {129, 129, 129}};
-
-  std::vector<BiasType> bias_types = {
-      BiasType::noBias, BiasType::MBias, BiasType::ScalarBias,
-      BiasType::MNBias, BiasType::NBias};
-
-  // Run tests with different combinations
-  for (const auto& size : test_sizes) {
-    for (const auto& bias_type : bias_types) {
-      run_test(std::get<0>(size), std::get<1>(size), std::get<2>(size), bias_type);
-    }
-  }
+  run_test(32, 32, 32);
+  run_test(60, 16, 92);
+  run_test(8, 8, 8);
+  run_test(128, 128, 128);
+  run_test(128, 32, 64);
+  run_test(4, 8, 12);
+  run_test(96, 24, 48);
+  run_test(48, 48, 120);
+  run_test(72, 80, 84);
 }
 
 }  // namespace test

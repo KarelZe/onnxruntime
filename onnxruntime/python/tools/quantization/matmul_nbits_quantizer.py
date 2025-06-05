@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib
 import logging
 import os
 
@@ -15,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 import onnx
 from onnx.onnx_pb import GraphProto, ModelProto, NodeProto, TensorProto
+from packaging import version
 
 from onnxruntime.capi._pybind_state import quantize_matmul_4bits, quantize_matmul_8bits, quantize_qdq_matmul_4bits
 
@@ -866,9 +868,7 @@ class DefaultWeightOnlyQuantizer:
             kwargs["N"] = cols
             kwargs["bits"] = bits
             kwargs["block_size"] = self.config.block_size
-
-            # Do not output accuracy_level if it is 0 since the attribute is optional and is not supported by most EPs.
-            if self.config.accuracy_level:
+            if self.config.accuracy_level is not None:
                 kwargs["accuracy_level"] = self.config.accuracy_level
 
             matmul_qbit_node = onnx.helper.make_node(
@@ -1356,7 +1356,21 @@ class MatMulNBitsQuantizer:
             self.model = ONNXModel(self.model)  # Ensure the model is wrapped back into ONNXModel
             self.model.clean_initializers()
         else:
-            # RTN or GPTQ weight-only quantize algorithm
+            # use Intel® Neural Compressor for RTN or GPTQ weight-only quantize algorithm
+            try:
+                importlib.import_module("neural_compressor")
+            except Exception as e:
+                logging.error(f"{e}.")
+                raise RuntimeError(
+                    "neural-compressor is not correctly installed. Please check your environment."
+                ) from e
+
+            import neural_compressor
+
+            assert version.parse(neural_compressor.__version__) >= version.parse("2.3.2"), (
+                "Require neural-compressor >= 2.3.2 to support weight only quantization!"
+            )
+
             self.int4_quant_algo()
 
 

@@ -37,6 +37,8 @@
 #include "core/optimizer/qdq_transformer/selectors_actions/shared/utils.h"
 #include "core/providers/partitioning_utils.h"
 
+#include "core/providers/qnn/ort_api.h"
+
 namespace onnxruntime {
 VSINPUExecutionProvider::VSINPUExecutionProvider(const VSINPUExecutionProviderInfo& info)
     : IExecutionProvider{onnxruntime::kVSINPUExecutionProvider,
@@ -54,17 +56,17 @@ VSINPUExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_vie
                                        const GraphOptimizerRegistry& /* graph_optimizer_registry */,
                                        IResourceAccountant* /* resource_accountant */) const {
   std::vector<std::unique_ptr<ComputeCapability>> result;
-  const auto& logger = *GetLogger();
+
   if (graph_viewer.IsSubgraph()) {
     return result;
   }
 
   for (const auto& tensor : graph_viewer.GetAllInitializedTensors()) {
     if (tensor.second->has_data_location()) {
-      LOGS(logger, VERBOSE) << "location:" << tensor.second->data_location();
+      LOGS_DEFAULT(VERBOSE) << "location:" << tensor.second->data_location();
       if (tensor.second->data_location() ==
           ONNX_NAMESPACE::TensorProto_DataLocation_EXTERNAL) {
-        LOGS(logger, WARNING) << "VSINPU: Initializers with external data location are not "
+        LOGS_DEFAULT(WARNING) << "VSINPU: Initializers with external data location are not "
                                  "currently supported";
         return result;
       }
@@ -91,11 +93,11 @@ VSINPUExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_vie
       supported = it->second;
     } else {
       // We only check the target node of the node unit
-      supported = vsi::npu::GraphEP::IsNodeSupportedInGroup(*node_unit, graph_viewer, logger);
+      supported = vsi::npu::GraphEP::IsNodeSupportedInGroup(*node_unit, graph_viewer);
       node_unit_supported_result[node_unit] = supported;
     }
 
-    LOGS(logger, VERBOSE) << "Node supported: [" << supported
+    LOGS_DEFAULT(VERBOSE) << "Node supported: [" << supported
                           << "] Operator type: [" << node.OpType()
                           << "] index: [" << node.Index()
                           << "] name: [" << node.Name()
@@ -156,9 +158,9 @@ VSINPUExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_vie
   // If the graph is partitioned in multiple subgraphs, and this may impact performance,
   // we want to give users a summary message at warning level.
   if (num_of_partitions > 1) {
-    LOGS(logger, WARNING) << summary_msg;
+    LOGS_DEFAULT(WARNING) << summary_msg;
   } else {
-    LOGS(logger, INFO) << summary_msg;
+    LOGS_DEFAULT(INFO) << summary_msg;
   }
 
   return result;

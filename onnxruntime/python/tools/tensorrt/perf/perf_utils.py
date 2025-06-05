@@ -69,7 +69,6 @@ table_headers = [model_title, *provider_list]
 disable = "disable"
 basic = "basic"
 extended = "extended"
-layout = "layout"
 enable_all = "all"
 
 

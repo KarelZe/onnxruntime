@@ -8,7 +8,6 @@
 #include "graph_transform_test_builder.h"
 #include "core/mlas/inc/mlas.h"
 #include "core/graph/graph.h"
-#include "test/common/dnnl_op_test_utils.h"
 
 namespace onnxruntime {
 namespace test {
@@ -36,8 +35,6 @@ NodeArg* NhwcMakeInitializer(ModelTestBuilder& builder, const std::vector<int64_
 #ifndef DISABLE_CONTRIB_OPS
 
 TEST(NhwcTransformerTests, Conv) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
       auto* input_arg = builder.MakeInput<uint8_t>(input_shape, 0, 31);
@@ -68,8 +65,6 @@ TEST(NhwcTransformerTests, Conv) {
 }
 
 TEST(NhwcTransformerTests, ConvBlockBinary) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::string& binary_op_type) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
       auto* input_arg = builder.MakeInput<uint8_t>({1, 23, 13, 13}, 0, 31);
@@ -116,8 +111,6 @@ TEST(NhwcTransformerTests, ConvBlockBinary) {
 }
 
 TEST(NhwcTransformerTests, ConvMaxPool) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
       auto* input_arg = builder.MakeInput<uint8_t>(input_shape, 0, 31);
@@ -184,8 +177,6 @@ TEST(NhwcTransformerTests, ConvMaxPoolIndexTensor) {
 }
 
 TEST(NhwcTransformerTests, ConvGlobalAveragePool) {
-  DNNL_GTEST_SKIP();
-
   auto build_test_case = [&](ModelTestBuilder& builder) {
     auto* input_arg = builder.MakeInput<uint8_t>({1, 23, 13, 13}, 0, 31);
     auto* conv1_output_arg = builder.MakeIntermediate();
@@ -225,8 +216,6 @@ TEST(NhwcTransformerTests, ConvGlobalAveragePool) {
 }
 
 TEST(NhwcTransformerTests, ConvAveragePool) {
-  DNNL_GTEST_SKIP();
-
   auto build_test_case = [&](ModelTestBuilder& builder) {
     auto* input_arg = builder.MakeInput<uint8_t>({1, 23, 13, 13}, 0, 31);
     auto* conv1_output_arg = builder.MakeIntermediate();
@@ -272,8 +261,6 @@ TEST(NhwcTransformerTests, ConvAveragePool) {
 }
 
 TEST(NhwcTransformerTests, ConvSplit) {
-  DNNL_GTEST_SKIP();
-
   for (int64_t axis = -4LL; axis < 4; axis++) {
     auto build_test_case = [&, axis](ModelTestBuilder& builder) {
       auto* input_arg = builder.MakeInput<uint8_t>({2, 23, 16, 16}, 0, 31);
@@ -379,8 +366,6 @@ TEST(NhwcTransformerTests, ConvSplitQLinearConcat) {
 }
 
 TEST(NhwcTransformerTests, ConvPad) {
-  DNNL_GTEST_SKIP();
-
   std::vector<std::string> pad_modes{"constant", "reflect", "edge"};
   for (const auto& mode : pad_modes) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -421,8 +406,6 @@ TEST(NhwcTransformerTests, ConvPad) {
 }
 
 TEST(NhwcTransformerTests, ConvBlockActivation) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](uint32_t extra_edges) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
       auto* input1_arg = builder.MakeInput<uint8_t>({1, 10, 13, 13}, 0, 31);

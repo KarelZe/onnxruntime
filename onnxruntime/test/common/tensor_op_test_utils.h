@@ -133,8 +133,7 @@ inline std::vector<BFloat16> ValueRange<BFloat16>(size_t count, BFloat16 start, 
   return result;
 }
 
-template <typename T>
-inline std::pair<float, float> MeanStdev(const T& v) {
+inline std::pair<float, float> MeanStdev(gsl::span<const float> v) {
   float sum = std::accumulate(v.begin(), v.end(), 0.0f);
   float mean = sum / v.size();
 

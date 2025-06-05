@@ -8,13 +8,11 @@
 #include <string>
 #include "core/common/status.h"
 #include "core/common/path_string.h"
-#include "core/framework/allocator.h"
 #include "core/session/abi_session_options_impl.h"
 #include "core/session/onnxruntime_c_api.h"
 #include "core/session/onnxruntime_session_options_config_keys.h"
 
 namespace onnxruntime {
-class Environment;
 
 /// <summary>
 /// Stores options to compile ONNX models into "EPContext" models.
@@ -25,9 +23,9 @@ class ModelCompilationOptions {
   /// Creates an instance with the session options to use for model compilation.
   /// The session options are expected to have execution providers that compile.
   /// </summary>
-  /// <param name="env">Reference to Environment</param>
+  /// <param name="env">Reference to OrtEnv</param>
   /// <param name="session_options">Reference to session options</param>
-  ModelCompilationOptions(const onnxruntime::Environment& env, const OrtSessionOptions& session_options);
+  ModelCompilationOptions(const OrtEnv& env, const OrtSessionOptions& session_options);
 
   /// <summary>
   /// Sets the file path to the input ONNX model to compile.
@@ -69,7 +67,7 @@ class ModelCompilationOptions {
   /// <param name="output_model_buffer_ptr">Pointer to the buffer that will contain the compiled model</param>
   /// <param name="output_model_buffer_size_ptr">Set to the size of the buffer</param>
   /// <returns>Status indicating potential error</returns>
-  Status SetOutputModelBuffer(onnxruntime::AllocatorPtr allocator, void** output_model_buffer_ptr,
+  Status SetOutputModelBuffer(OrtAllocator* allocator, void** output_model_buffer_ptr,
                               size_t* output_model_buffer_size_ptr);
 
   /// <summary>
@@ -79,13 +77,6 @@ class ModelCompilationOptions {
   /// <param name="embed_ep_context_in_model">True if should be embedded, false otherwise</param>
   /// <returns>Status indicating potential error</returns>
   Status SetEpContextEmbedMode(bool embed_ep_context_in_model);
-
-  /// <summary>
-  /// Sets flags representing enabled boolean options defined in OrtCompileApiFlags.
-  /// </summary>
-  /// <param name="flags">unsigned integer set to the bitwise OR of enabled flags.</param>
-  /// <returns>Status indicating success or an error</returns>
-  Status SetFlags(size_t flags);
 
   /// <summary>
   /// Returns a reference to the session options object.
@@ -131,7 +122,7 @@ class ModelCompilationOptions {
   Status CheckInputModelSettings() const;
   Status CheckOutputModelSettings() const;
 
-  const onnxruntime::Environment& env_;
+  const OrtEnv& env_;
   OrtSessionOptions session_options_;
   std::string input_model_path_;
   const void* input_model_data_ = nullptr;

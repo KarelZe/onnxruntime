@@ -243,12 +243,6 @@ inline ConstMemoryInfo AllocatorImpl<T>::GetInfo() const {
   return ConstMemoryInfo{out};
 }
 
-template <typename T>
-inline KeyValuePairs AllocatorImpl<T>::GetStats() const {
-  OrtKeyValuePairs* out;
-  ThrowOnError(GetApi().AllocatorGetStats(this->p_, &out));
-  return KeyValuePairs(out);
-}
 }  // namespace detail
 
 inline AllocatorWithDefaultOptions::AllocatorWithDefaultOptions() {
@@ -838,11 +832,6 @@ inline ModelCompilationOptions& ModelCompilationOptions::SetEpContextEmbedMode(
   return *this;
 }
 
-inline ModelCompilationOptions& ModelCompilationOptions::SetFlags(size_t flags) {
-  Ort::ThrowOnError(GetCompileApi().ModelCompilationOptions_SetFlags(this->p_, flags));
-  return *this;
-}
-
 namespace detail {
 
 template <typename T>
@@ -1161,14 +1150,9 @@ inline SessionOptionsImpl<T>& SessionOptionsImpl<T>::AppendExecutionProvider_V2(
 }
 
 template <typename T>
-inline SessionOptionsImpl<T>& SessionOptionsImpl<T>::SetEpSelectionPolicy(OrtExecutionProviderDevicePolicy policy) {
-  ThrowOnError(GetApi().SessionOptionsSetEpSelectionPolicy(this->p_, policy));
-  return *this;
-}
-
-template <typename T>
-inline SessionOptionsImpl<T>& SessionOptionsImpl<T>::SetEpSelectionPolicy(EpSelectionDelegate delegate, void* state) {
-  ThrowOnError(GetApi().SessionOptionsSetEpSelectionPolicyDelegate(this->p_, delegate, state));
+inline SessionOptionsImpl<T>& SessionOptionsImpl<T>::SetEpSelectionPolicy(OrtExecutionProviderDevicePolicy policy,
+                                                                          EpSelectionDelegate* delegate) {
+  ThrowOnError(GetApi().SessionOptionsSetEpSelectionPolicy(this->p_, policy, delegate));
   return *this;
 }
 
@@ -1831,13 +1815,6 @@ template <typename T>
 inline size_t ConstValueImpl<T>::GetStringTensorElementLength(size_t element_index) const {
   size_t out;
   ThrowOnError(GetApi().GetStringTensorElementLength(this->p_, element_index, &out));
-  return out;
-}
-
-template <typename T>
-inline size_t ConstValueImpl<T>::GetTensorSizeInBytes() const {
-  size_t out;
-  ThrowOnError(GetApi().GetTensorSizeInBytes(this->p_, &out));
   return out;
 }
 

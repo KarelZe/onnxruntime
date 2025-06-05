@@ -205,9 +205,6 @@ ORT_API_STATUS_IMPL(OrtApis::SetSessionGraphOptimizationLevel, _In_ OrtSessionOp
     case ORT_ENABLE_EXTENDED:
       options->value.graph_optimization_level = onnxruntime::TransformerLevel::Level2;
       break;
-    case ORT_ENABLE_LAYOUT:
-      options->value.graph_optimization_level = onnxruntime::TransformerLevel::Level3;
-      break;
     case ORT_ENABLE_ALL:
       options->value.graph_optimization_level = onnxruntime::TransformerLevel::MaxLevel;
       break;
@@ -370,24 +367,12 @@ ORT_API_STATUS_IMPL(OrtApis::SetDeterministicCompute, _Inout_ OrtSessionOptions*
 }
 
 ORT_API_STATUS_IMPL(OrtApis::SessionOptionsSetEpSelectionPolicy, _In_ OrtSessionOptions* options,
-                    _In_ OrtExecutionProviderDevicePolicy policy) {
+                    _In_ OrtExecutionProviderDevicePolicy policy,
+                    _In_opt_ EpSelectionDelegate* delegate) {
   API_IMPL_BEGIN
   options->value.ep_selection_policy.enable = true;
   options->value.ep_selection_policy.policy = policy;
-  options->value.ep_selection_policy.delegate = nullptr;
-  options->value.ep_selection_policy.state = nullptr;
-  return nullptr;
-  API_IMPL_END
-}
-
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsSetEpSelectionPolicyDelegate, _In_ OrtSessionOptions* options,
-                    _In_opt_ EpSelectionDelegate delegate,
-                    _In_opt_ void* state) {
-  API_IMPL_BEGIN
-  options->value.ep_selection_policy.enable = true;
-  options->value.ep_selection_policy.policy = OrtExecutionProviderDevicePolicy_DEFAULT;
   options->value.ep_selection_policy.delegate = delegate;
-  options->value.ep_selection_policy.state = state;
   return nullptr;
   API_IMPL_END
 }

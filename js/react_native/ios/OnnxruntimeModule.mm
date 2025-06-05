@@ -301,7 +301,6 @@ static NSDictionary* graphOptimizationLevelTable = @{
   @"disabled" : @(ORT_DISABLE_ALL),
   @"basic" : @(ORT_ENABLE_BASIC),
   @"extended" : @(ORT_ENABLE_EXTENDED),
-  @"layout" : @(ORT_ENABLE_LAYOUT),
   @"all" : @(ORT_ENABLE_ALL)
 };
 

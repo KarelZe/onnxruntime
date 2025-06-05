@@ -181,10 +181,6 @@ OpBuilderRegistrations::OpBuilderRegistrations() {
   {
     CreateMatMulOpBuilder("MatMul", *this);
   }
-
-  {
-    CreateLSTMOpBuilder("LSTM", *this);
-  }
 }
 
 const IOpBuilder* GetOpBuilder(const std::string& onnx_op_type) {

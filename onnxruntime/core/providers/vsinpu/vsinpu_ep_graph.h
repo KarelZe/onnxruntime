@@ -57,12 +57,11 @@ class GraphEP {
   bool Prepare();
 
   static bool SupportedOp(const onnxruntime::GraphViewer& graph_viewer,
-                          const NodeUnit& node_unit, const logging::Logger& logger);
+                          const NodeUnit& node_unit);
 
   // If a node is supported by VSINPU in a partition node group
   // `node_outputs_in_group` is the set of the output names of the nodes added to this group so far
-  static bool IsNodeSupportedInGroup(const NodeUnit& node_unit, const GraphViewer& graph_viewer,
-                                     const logging::Logger& logger);
+  static bool IsNodeSupportedInGroup(const NodeUnit& node_unit, const GraphViewer& graph_viewer);
 
   const NodeUnit& GetNodeUnit(const Node* node) const;
 

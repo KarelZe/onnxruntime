@@ -35,8 +35,6 @@ void RegisterExceptions(pybind11::module& m) {
   pybind11::register_exception<NotImplemented>(m, "NotImplemented");
   pybind11::register_exception<InvalidGraph>(m, "InvalidGraph");
   pybind11::register_exception<EPFail>(m, "EPFail");
-  pybind11::register_exception<ModelLoadCanceled>(m, "ModelLoadCanceled");
-  pybind11::register_exception<ModelRequiresCompilation>(m, "ModelRequiresCompilation");
 }
 
 void OrtPybindThrowIfError(onnxruntime::common::Status status) {
@@ -63,10 +61,6 @@ void OrtPybindThrowIfError(onnxruntime::common::Status status) {
         throw InvalidGraph(std::move(msg));
       case onnxruntime::common::StatusCode::EP_FAIL:
         throw EPFail(std::move(msg));
-      case onnxruntime::common::StatusCode::MODEL_LOAD_CANCELED:
-        throw ModelLoadCanceled(std::move(msg));
-      case onnxruntime::common::StatusCode::MODEL_REQUIRES_COMPILATION:
-        throw ModelRequiresCompilation(std::move(msg));
       default:
         throw std::runtime_error(std::move(msg));
     }

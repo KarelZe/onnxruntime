@@ -1206,33 +1206,6 @@ ORT_API_STATUS_IMPL(OrtApis::GetStringTensorElementLength, _In_ const OrtValue* 
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtApis::GetTensorSizeInBytes, _In_ const OrtValue* value, _Out_ size_t* size) {
-  API_IMPL_BEGIN
-
-  if (value == nullptr) {
-    return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Input `value` argument must not be null");
-  }
-
-  if (size == nullptr) {
-    return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Output `size` argument must not be null");
-  }
-
-  if (!value->IsAllocated() || !value->IsTensor()) {
-    return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "OrtValue is expected to contain a tensor");
-  }
-
-  const auto& tensor = value->Get<onnxruntime::Tensor>();
-
-  // Check if this is a string tensor
-  if (tensor.IsDataTypeString()) {
-    return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "String tensors are not supported by this API");
-  }
-
-  *size = tensor.SizeInBytes();
-  return nullptr;
-  API_IMPL_END
-}
-
 ORT_API_STATUS_IMPL(OrtApis::GetStringTensorContent, _In_ const OrtValue* value, _Out_writes_bytes_all_(s_len) void* s,
                     size_t s_len, _Out_writes_all_(offsets_len) size_t* offsets, size_t offsets_len) {
   API_IMPL_BEGIN
@@ -1564,12 +1537,6 @@ ORT_API_STATUS_IMPL(OrtApis::AllocatorGetInfo, _In_ const OrtAllocator* ptr, _Ou
   API_IMPL_BEGIN
   *out = ptr->Info(ptr);
   return nullptr;
-  API_IMPL_END
-}
-
-ORT_API_STATUS_IMPL(OrtApis::AllocatorGetStats, _In_ const OrtAllocator* ptr, _Outptr_ OrtKeyValuePairs** out) {
-  API_IMPL_BEGIN
-  return ptr->GetStats(ptr, out);
   API_IMPL_END
 }
 
@@ -2498,16 +2465,49 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_V2, _In_ OrtS
                     _In_reads_(num_op_options) const char* const* ep_option_vals,
                     size_t num_ep_options) {
   API_IMPL_BEGIN
-  std::unique_ptr<IExecutionProviderFactory> provider_factory = nullptr;
+  if (num_ep_devices > 1) {
+    const auto& ep_name = ep_devices[0]->ep_name;
+    bool all_match = std::all_of(ep_devices + 1, ep_devices + num_ep_devices,
+                                 [&ep_name](const OrtEpDevice* ep_device) { return ep_device->ep_name == ep_name; });
+    if (!all_match) {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT,
+                                   "All OrtEpDevice values in ep_devices must have the same execution provider.");
+    }
+  }
 
-  ORT_API_RETURN_IF_STATUS_NOT_OK(CreateIExecutionProviderFactoryForEpDevices(
-      env->GetEnvironment(),
-      session_options->value,
-      gsl::span<const OrtEpDevice* const>(ep_devices, num_ep_devices),
-      gsl::span<const char* const>(ep_option_keys, num_ep_options),
-      gsl::span<const char* const>(ep_option_vals, num_ep_options),
-      /*output*/ provider_factory));
-  session_options->provider_factories.push_back(std::move(provider_factory));
+  EpFactoryInternal* internal_factory = nullptr;
+  for (size_t i = 0; i < num_ep_devices; ++i) {
+    const OrtEpDevice* entry = ep_devices[i];
+
+    // we expect the internal factory to be available for internal and provider bridge EPs, which is all we support.
+    internal_factory = env->GetEnvironment().GetEpFactoryInternal(entry->ep_factory);
+    if (!internal_factory) {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "EP is not currently supported by this API");
+    }
+
+    // add the options to the session options with the EP prefix.
+    // first add the default values with prefix followed by user specified values so those win
+    const auto prefix = OrtSessionOptions::GetProviderOptionPrefix(entry->ep_name.c_str());
+    auto& config_options = session_options->value.config_options;
+    for (const auto& [key, value] : entry->ep_options.entries) {
+      ORT_API_RETURN_IF_STATUS_NOT_OK(config_options.AddConfigEntry((prefix + key).c_str(), value.c_str()));
+    }
+
+    for (size_t j = 0; j < num_ep_options; ++j) {
+      if (ep_option_keys[j] == nullptr) {
+        continue;
+      }
+
+      ORT_API_RETURN_IF_STATUS_NOT_OK(config_options.AddConfigEntry((prefix + ep_option_keys[j]).c_str(),
+                                                                    ep_option_vals[j]));
+    }
+  }
+
+  if (internal_factory) {
+    session_options->provider_factories.push_back(
+        std::make_unique<InternalExecutionProviderFactory>(
+            *internal_factory, std::vector<const OrtEpDevice*>(ep_devices, ep_devices + num_ep_devices)));
+  }
 
   return nullptr;
   API_IMPL_END
@@ -3013,7 +3013,6 @@ static constexpr OrtApi ort_api_1_to_23 = {
     &OrtApis::GetEpDevices,
     &OrtApis::SessionOptionsAppendExecutionProvider_V2,
     &OrtApis::SessionOptionsSetEpSelectionPolicy,
-    &OrtApis::SessionOptionsSetEpSelectionPolicyDelegate,
 
     &OrtApis::HardwareDevice_Type,
     &OrtApis::HardwareDevice_VendorId,
@@ -3029,8 +3028,6 @@ static constexpr OrtApi ort_api_1_to_23 = {
 
     &OrtApis::GetEpApi,
     // End of Version 22 - DO NOT MODIFY ABOVE (see above text for more information)
-    &OrtApis::GetTensorSizeInBytes,
-    &OrtApis::AllocatorGetStats,
 };
 
 // OrtApiBase can never change as there is no way to know what version of OrtApiBase is returned by OrtGetApiBase.
@@ -3065,7 +3062,7 @@ static_assert(offsetof(OrtApi, AddExternalInitializersFromFilesInMemory) / sizeo
 // no additions in version 19, 20, and 21
 static_assert(offsetof(OrtApi, SetEpDynamicOptions) / sizeof(void*) == 284, "Size of version 20 API cannot change");
 
-static_assert(offsetof(OrtApi, GetEpApi) / sizeof(void*) == 317, "Size of version 22 API cannot change");
+static_assert(offsetof(OrtApi, GetEpApi) / sizeof(void*) == 316, "Size of version 22 API cannot change");
 
 // So that nobody forgets to finish an API version, this check will serve as a reminder:
 static_assert(std::string_view(ORT_VERSION) == "1.23.0",

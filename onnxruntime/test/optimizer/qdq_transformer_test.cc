@@ -27,7 +27,6 @@
 #include "test/framework/test_utils.h"
 #include "test/util/include/asserts.h"
 #include "test/util/include/inference_session_wrapper.h"
-#include "test/common/dnnl_op_test_utils.h"
 
 #include "gtest/gtest.h"
 #include "graph_transform_test_builder.h"
@@ -117,8 +116,6 @@ void QDQTransformerConvTests() {
 }
 
 TEST(QDQTransformerTests, Conv_U8X8U8) {
-  DNNL_GTEST_SKIP();
-
   QDQTransformerConvTests<uint8_t, uint8_t, int32_t, uint8_t>();
   QDQTransformerConvTests<uint8_t, int8_t, int32_t, uint8_t>();
 }
@@ -148,8 +145,6 @@ TEST(QDQTransformerTests, Conv_S8X8S8) {
 }
 
 TEST(QDQTransformerTests, ConvMaxPoolReshape_UInt8) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        int opset_version, bool use_contrib_qdq = false) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -221,8 +216,6 @@ TEST(QDQTransformerTests, ConvMaxPoolReshape_UInt8) {
 }
 
 TEST(QDQTransformerTests, ConvMaxPoolReshape_Int8) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        bool use_contrib_qdq = false) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2319,8 +2312,6 @@ TEST(QDQTransformerTests, MatMulIntegerToFloat) {
 }
 
 TEST(QDQTransformerTests, ConvRelu) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        bool is_zp_zero, bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2376,8 +2367,6 @@ TEST(QDQTransformerTests, ConvRelu) {
 }
 
 TEST(QDQTransformerTests, ConvAveragePoolReshape_UInt8) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2447,8 +2436,6 @@ TEST(QDQTransformerTests, ConvAveragePoolReshape_UInt8) {
 }
 
 TEST(QDQTransformerTests, ConvAveragePoolReshape_Int8) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2767,8 +2754,6 @@ TEST(QDQTransformerTests, Sigmoid_U8S8) {
 }
 
 TEST(QDQTransformerTests, ConvTranspose_QBackward) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        const std::vector<int64_t>& perms, bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2819,8 +2804,6 @@ TEST(QDQTransformerTests, ConvTranspose_QBackward) {
 }
 
 TEST(QDQTransformerTests, QBackward_MutilpleSteps) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2903,8 +2886,6 @@ TEST(QDQTransformerTests, QBackward_MutilpleSteps) {
 }
 
 TEST(QDQTransformerTests, ConvTranspose_DQForward) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        const std::vector<int64_t>& perms, bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {
@@ -2971,8 +2952,6 @@ TEST(QDQTransformerTests, ConvTranspose_DQForward) {
 }
 
 TEST(QDQTransformerTests, DQForward_MutilpleSteps) {
-  DNNL_GTEST_SKIP();
-
   auto test_case = [&](const std::vector<int64_t>& input_shape, const std::vector<int64_t>& weights_shape,
                        const std::vector<int64_t>& perms, bool use_contrib_qdq) {
     auto build_test_case = [&](ModelTestBuilder& builder) {

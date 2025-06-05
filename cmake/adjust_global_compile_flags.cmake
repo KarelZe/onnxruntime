@@ -4,8 +4,6 @@ if (ANDROID)
   # Build shared libraries with support for 16 KB ELF alignment
   # https://source.android.com/docs/core/architecture/16kb-page-size/16kb#build-lib-16kb-alignment
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
-  # Also apply to MODULE libraries (like libonnxruntime4j_jni.so)
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
 endif()
 
 # Enable space optimization for gcc/clang

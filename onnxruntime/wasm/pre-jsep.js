@@ -104,7 +104,6 @@ Module["jsepInit"] = (name, params) => {
       Module["webnnEnsureTensor"],
       Module.webnnUploadTensor,
       Module["webnnDownloadTensor"],
-      Module["webnnEnableTraceEvent"],
     ] = params.slice(1);
 
     // This function is called from both JS and an EM_ASM block, it needs both a minifiable name and an explicit name.

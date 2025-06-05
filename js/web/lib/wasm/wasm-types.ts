@@ -71,7 +71,6 @@ export declare namespace JSEP {
         ensureTensor: EnsureTensorFunction,
         uploadTensor: UploadTensorFunction,
         downloadTensor: DownloadTensorFunction,
-        enableTraceEvent: boolean,
       ],
     ): void;
   }

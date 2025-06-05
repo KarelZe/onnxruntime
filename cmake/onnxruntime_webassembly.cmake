@@ -196,7 +196,7 @@ else()
     onnxruntime_util
     re2::re2
   )
-  set(EXPORTED_RUNTIME_METHODS "'stackAlloc','stackRestore','stackSave','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue','setValue','HEAP8','HEAPU8','HEAP32','HEAPU32'")
+  set(EXPORTED_RUNTIME_METHODS "'stackAlloc','stackRestore','stackSave','UTF8ToString','stringToUTF8','lengthBytesUTF8','getValue','setValue'")
   if (onnxruntime_USE_XNNPACK)
     target_link_libraries(onnxruntime_webassembly PRIVATE XNNPACK)
     string(APPEND EXPORTED_RUNTIME_METHODS ",'addFunction'")

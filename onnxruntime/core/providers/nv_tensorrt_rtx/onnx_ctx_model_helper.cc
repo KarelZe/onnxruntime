@@ -1,5 +1,4 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // Licensed under the MIT License.
 
 #include <iostream>

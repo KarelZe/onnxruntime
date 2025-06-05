@@ -43,8 +43,7 @@ void RunQAttention(const std::vector<float>& input_data,
                    int number_of_heads,
                    bool is_unidirectional = false,
                    bool use_float16 = false,
-                   int input_hidden_size = 0,
-                   float abs_tolerance = -1.0f) {
+                   int input_hidden_size = 0) {
   input_hidden_size = (input_hidden_size == 0) ? hidden_size : input_hidden_size;
 
   OpTester tester("QAttention", 1, onnxruntime::kMSDomain);
@@ -91,13 +90,13 @@ void RunQAttention(const std::vector<float>& input_data,
     tester.AddInput<MLFloat16>("input_scale", {1}, ToFloat16({input_quant_params.scale}));
     tester.AddInput<MLFloat16>("weight_scale", {1}, ToFloat16({weight_quant_params.scale}));
     tester.AddOutput<MLFloat16>("output", output_dims, ToFloat16(output_data));
-    tester.SetOutputTolerance(abs_tolerance > 0.0f ? abs_tolerance : 0.01f);
+    tester.SetOutputTolerance(0.01f);
   } else {
     tester.AddInput<float>("bias", bias_dims, bias_data);
     tester.AddInput<float>("input_scale", {1}, {input_quant_params.scale});
     tester.AddInput<float>("weight_scale", {1}, {weight_quant_params.scale});
     tester.AddOutput<float>("output", output_dims, output_data);
-    tester.SetOutputTolerance(abs_tolerance > 0.0f ? abs_tolerance : 0.005f);
+    tester.SetOutputTolerance(0.005f);
   }
 
   if (mask_index_data.size() > 0) {
@@ -179,12 +178,9 @@ static void RunQAttentionDNNL(
     weights_quant_params.zero_point = 1;
   }
 
-  constexpr float abs_tolerance = 0.05f;
   RunQAttention<uint8_t, int8_t, EP::DNNL>(
       input_data, weights_data, bias_data, mask_index_data, output_data, input_quant_params, weights_quant_params,
-      batch_size, sequence_length, hidden_size, number_of_heads, is_unidirectional, false, input_hidden_size,
-      abs_tolerance);
-
+      batch_size, sequence_length, hidden_size, number_of_heads, is_unidirectional, false, input_hidden_size);
 #else
   ORT_UNUSED_PARAMETER(input_data);
   ORT_UNUSED_PARAMETER(weights_data);

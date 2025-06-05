@@ -6,8 +6,6 @@
 #include "core/framework/allocator.h"
 #include "core/session/onnxruntime_cxx_api.h"
 
-#include <string>
-
 namespace onnxruntime {
 
 // Since all allocators are of type 'OrtAllocator' and there is a single
@@ -30,8 +28,6 @@ struct OrtAllocatorImplWrappingIAllocator final : public OrtAllocatorImpl {
 
   const OrtMemoryInfo* Info() const;
   void* Reserve(size_t size);
-
-  std::unordered_map<std::string, std::string> Stats() const;
 
   ORT_DISALLOW_COPY_AND_ASSIGNMENT(OrtAllocatorImplWrappingIAllocator);
 

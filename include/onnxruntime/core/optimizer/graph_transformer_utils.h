@@ -36,8 +36,7 @@ namespace optimizer_utils {
    TODO: This is visible for testing at the moment, but we should rather make it private. */
 InlinedVector<std::unique_ptr<RewriteRule>> GenerateRewriteRules(
     TransformerLevel level,
-    const InlinedHashSet<std::string>& rules_to_disable = {},
-    const bool enable_cast_chain_elimination = false);
+    const InlinedHashSet<std::string>& rules_to_disable = {});
 
 /** Given a TransformerLevel, this method generates a name for the rule-based graph transformer of that level. */
 std::string GenerateRuleBasedTransformerName(TransformerLevel level);
@@ -46,8 +45,7 @@ std::string GenerateRuleBasedTransformerName(TransformerLevel level);
 std::unique_ptr<RuleBasedGraphTransformer> GenerateRuleBasedGraphTransformer(
     TransformerLevel level,
     const InlinedHashSet<std::string>& rules_to_disable,
-    const InlinedHashSet<std::string_view>& compatible_execution_providers,
-    const bool enable_cast_chain_elimination = false);
+    const InlinedHashSet<std::string_view>& compatible_execution_providers);
 
 /** Generates all predefined (both rule-based and non-rule-based) transformers for this level.
     Any transformers or rewrite rules named in rules_and_transformers_to_disable will be excluded. */

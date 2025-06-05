@@ -50,7 +50,7 @@ class VSINPUExecutionProvider : public IExecutionProvider {
   std::mutex& GetMutex() { return mutex_; }
 
  private:
-  OrtDevice::DeviceId device_id_;
+  int device_id_;
   std::mutex mutex_;
 };
 

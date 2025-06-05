@@ -581,7 +581,7 @@ ${shaderSource}`);
       // TODO: add webgl 1 handling.
       throw new Error('WebGL1 profiling currently not supported');
     }
-    // return milliseconds
+    // return miliseconds
     return timeElapsed / 1000000;
   }
 

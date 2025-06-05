@@ -21,16 +21,16 @@ namespace Microsoft.ML.OnnxRuntime
     /// <summary>
     /// Represents a hardware device that is available on the current system.
     /// </summary>
-    public class OrtHardwareDevice
+    public class OrtHardwareDevice : SafeHandle
     {
 
         /// <summary>
         /// Construct an OrtHardwareDevice for a native OrtHardwareDevice instance.
         /// </summary>
         /// <param name="deviceHandle">Native OrtHardwareDevice handle.</param>
-        internal OrtHardwareDevice(IntPtr deviceHandle)            
+        internal OrtHardwareDevice(IntPtr deviceHandle)
+            : base(deviceHandle, ownsHandle: false)
         {
-            _handle = deviceHandle;
         }
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace Microsoft.ML.OnnxRuntime
         {
             get
             {
-                return (OrtHardwareDeviceType)NativeMethods.OrtHardwareDevice_Type(_handle);
+                return (OrtHardwareDeviceType)NativeMethods.OrtHardwareDevice_Type(handle);
             }
         }
 
@@ -54,7 +54,7 @@ namespace Microsoft.ML.OnnxRuntime
         {
             get
             {
-                return NativeMethods.OrtHardwareDevice_VendorId(_handle);
+                return NativeMethods.OrtHardwareDevice_VendorId(handle);
             }
         }
 
@@ -65,7 +65,7 @@ namespace Microsoft.ML.OnnxRuntime
         {
             get
             {
-                IntPtr vendorPtr = NativeMethods.OrtHardwareDevice_Vendor(_handle);
+                IntPtr vendorPtr = NativeMethods.OrtHardwareDevice_Vendor(handle);
                 return NativeOnnxValueHelper.StringFromNativeUtf8(vendorPtr);
             }
         }
@@ -82,7 +82,7 @@ namespace Microsoft.ML.OnnxRuntime
         {
             get
             {
-                return NativeMethods.OrtHardwareDevice_DeviceId(_handle);
+                return NativeMethods.OrtHardwareDevice_DeviceId(handle);
             }
         }
 
@@ -95,10 +95,22 @@ namespace Microsoft.ML.OnnxRuntime
         {
             get
             {
-                return new OrtKeyValuePairs(NativeMethods.OrtHardwareDevice_Metadata(_handle));
+                return new OrtKeyValuePairs(NativeMethods.OrtHardwareDevice_Metadata(handle));
             }
         }
 
-        private readonly IntPtr _handle;
+        /// <summary>
+        /// Indicates whether the native handle is invalid.
+        /// </summary>
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        /// <summary>
+        /// No-op. OrtHardwareDevice is always read-only as the instance is owned by native ORT.
+        /// </summary>
+        /// <returns>True</returns>
+        protected override bool ReleaseHandle()
+        {
+            return true;
+        }
     }
 }

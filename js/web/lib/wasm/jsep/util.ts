@@ -189,7 +189,7 @@ export class ShapeUtil {
   }
 
   /**
-   * normalize axis of range [-r, r) into [0, r).
+   * normailze axis of range [-r, r) into [0, r).
    */
   static normalizeAxis(axis: number, tensorRank: number): number {
     if (axis < -tensorRank && axis >= tensorRank) {

@@ -229,7 +229,6 @@ TEST(PoolTest, MaxPool1D_case2) {
 
   test.AddInput<float>("X", x_dims, x_vals);
   test.AddOutput<float>("Y", expected_dims, expected_vals);
-
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
 }
 
