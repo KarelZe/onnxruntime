@@ -339,7 +339,6 @@ class FusionBartAttention(FusionAttention):
             ["Mul", "Transpose", "Reshape", "Add", "MatMul"],
             [0, 0, 0, 0, 1],
         )
-
         reshape_q_2 = None
         if q_nodes is not None:
             reshape_q_2, transpose_q, reshape_q_1, mul_q, add_q, matmul_q = q_nodes
@@ -458,7 +457,6 @@ class FusionBartAttention(FusionAttention):
                 present_k = identity_node_k[0].output[0] if len(identity_node_k) == 1 else ""
         else:
             return
-
         past_k = past_k if past_k in graph_input_names else ""
         present_k = present_k if present_k in graph_output_names else ""
 
@@ -490,7 +488,18 @@ class FusionBartAttention(FusionAttention):
             )
         ):
             return
-        elif False:
+        elif (
+            not model_impl_openai
+            and not bool(past_k)
+            and not self.check_runtime_shape_path(
+                reshape_qkv_2,
+                reshape_qkv_1,
+                reshape_q_2,
+                reshape_k_2,
+                reshape_v_2,
+                root_input,
+            )
+        ):
             return
 
         three_root_inputs = bool(past_k) and bool(past_v) and matmul_k is None and "matmul_v" not in locals()
