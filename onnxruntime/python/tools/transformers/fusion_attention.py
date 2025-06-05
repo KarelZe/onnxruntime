@@ -913,6 +913,7 @@ class FusionAttention(Fusion):
                 (_, einsum_node, transpose_qkv, matmul_qkv) = qkv_nodes
             else:
                 return
+
         other_inputs = []
         for _i, node_input in enumerate(start_node.input):
             if node_input not in output_name_to_node:
