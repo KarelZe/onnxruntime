@@ -488,18 +488,8 @@ class FusionBartAttention(FusionAttention):
             )
         ):
             return
-        elif (
-            not model_impl_openai
-            and not bool(past_k)
-            and not self.check_runtime_shape_path(
-                reshape_qkv_2,
-                reshape_qkv_1,
-                reshape_q_2,
-                reshape_k_2,
-                reshape_v_2,
-                root_input,
-            )
-        ):
+        # TODO (KarelZe): figure out why initial implementation was needed.
+        elif False:
             return
 
         three_root_inputs = bool(past_k) and bool(past_v) and matmul_k is None and "matmul_v" not in locals()
