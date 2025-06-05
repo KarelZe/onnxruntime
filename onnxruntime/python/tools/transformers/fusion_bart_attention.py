@@ -147,8 +147,6 @@ class FusionBartAttention(FusionAttention):
             ["Add", "MatMul", "Reshape", "Transpose", "MatMul"],
             [1, 1, 0, 0, 0],
         )
-        print("qkv_nodes:", qkv_nodes, "normalize_node:", normalize_node.name)
-        print("==="*8)
 
         if qkv_nodes is not None:
             (
@@ -190,8 +188,6 @@ class FusionBartAttention(FusionAttention):
             return
         root_input = other_inputs[0]
 
-        print("qkv_nodes", qkv_nodes)
-
         # Sometimes the input name to the attention MatMul nodes does not match the input name to the end
         # SkipLayerNormalization node (name saved in root_input). We find the true input name to the MatMul
         # nodes by getting the initial SkipLayerNormalization node and checking how many MatMul nodes are
@@ -220,10 +216,6 @@ class FusionBartAttention(FusionAttention):
         graph_input_names = {node.name for node in self.model.graph().input}
         graph_output_names = {node.name for node in self.model.graph().output}
 
-        print("reached matmul breakpoint")
-        print("*"*8)
-        print("matmul_qkv", matmul_qkv)
-
         v_nodes = self.model.match_parent_path(
             matmul_qkv,
             #["Reshape", "Transpose", "Reshape", "Add", "MatMul"],
@@ -232,7 +224,6 @@ class FusionBartAttention(FusionAttention):
             ["Transpose", "Reshape", "Add", "MatMul"],
             [1, 0, 0, None],
         )
-        print("v_nodes", v_nodes)
 
         v_nodes_openai = self.model.match_parent_path(
             matmul_qkv,
@@ -258,15 +249,8 @@ class FusionBartAttention(FusionAttention):
         )
         past_v, present_v = "", ""
         reshape_v_2, add_v = None, None
-        # if v_nodes is not None:
-
-        print("###")
-        print("assortment of v_nodes")
-        print(v_nodes, v_nodes_openai, v_nodes_with_past_self_attn, v_nodes_with_past_cross_attn)
 
         if v_nodes is not None:
-            # (reshape_v_2, transpose_v, reshape_v_1, add_v, matmul_v) = v_nodes
-            # mb (1 line)
             (transpose_v, reshape_v_1, add_v, matmul_v) = v_nodes
             # For initial pass through encoder-decoder_with_past to get starting past values (beam search)
             present_v = transpose_v.output[0]
@@ -286,9 +270,6 @@ class FusionBartAttention(FusionAttention):
                 ["Reshape", "Transpose"],
                 exclude=[reshape_v_1],
             )
-            print("#"*8)
-            print("reshape_path", reshape_path)
-
             # For decoder attention types
             # add_v_node                     Reshape <- Transpose <-Past_V
             #           \                  /
@@ -337,8 +318,6 @@ class FusionBartAttention(FusionAttention):
                 )
                 present_v = identity_node_v[0].output[0] if len(identity_node_v) == 1 else ""
         else:
-            # mb
-            print("fuse_attention: failed to match v nodes")
             logger.debug("fuse_attention: failed to match v path")
             return
         past_v = past_v if past_v in graph_input_names else ""
@@ -348,11 +327,8 @@ class FusionBartAttention(FusionAttention):
         qk_nodes_2 = self.model.match_parent_path(
             matmul_qkv, ["Softmax", "Reshape", "Add", "Reshape", "MatMul"], [0, 0, 0, 0, 0]
         )
-        print("#"*8)
-        print("qk_nodes_1", qk_nodes_1, "qk_nodes_2", qk_nodes_2)
 
         qk_nodes_2_openai = self.model.match_parent_path(matmul_qkv, ["Softmax", "Add", "MatMul"], [0, 0, 0])
-        print("qk_nodes_2_openai", qk_nodes_2_openai)
         add_qk = None
         if qk_nodes_1 is not None:
             _, matmul_qk = qk_nodes_1
@@ -377,9 +353,6 @@ class FusionBartAttention(FusionAttention):
             ["Mul", "Transpose", "Reshape", "Add", "MatMul"],
             [0, 0, 0, 0, 1],
         )
-
-        print("*"*8)
-        print("q_nodes", q_nodes, "q_nodes_openai", q_nodes_openai)
 
         # again q_nodes_openai are matched.
         reshape_q_2 = None
@@ -427,9 +400,6 @@ class FusionBartAttention(FusionAttention):
             ["Mul", "Transpose", "Reshape", "Reshape", "Transpose"],
             [1, 0, 0, 0, 0],
         )
-        print("..."*8)
-        print("assortment of k_nodes")
-        print(k_nodes_with_bias, k_nodes_with_bias_openai, k_nodes_no_bias, k_nodes_no_bias_with_past_self_attn, )
 
         past_k, present_k = "", ""
         reshape_k_2, reshape_k_1, matmul_k = None, None, None
@@ -511,8 +481,6 @@ class FusionBartAttention(FusionAttention):
         else:
             return
 
-        print("new breakpoint reached (past/present)")
-
         past_k = past_k if past_k in graph_input_names else ""
         present_k = present_k if present_k in graph_output_names else ""
 
@@ -545,23 +513,9 @@ class FusionBartAttention(FusionAttention):
         ):
             return
         elif (
-            not model_impl_openai
-            and not past_k
-            # mb (nex lines)
-            and False
-            # and not self.check_runtime_shape_path(
-            #     reshape_qkv_2,
-            #     reshape_qkv_1,
-            #     reshape_q_2,
-            #     reshape_k_2,
-            #     reshape_v_2,
-            #     root_input,
-            # )
+            False
         ):
             return
-
-        print("final breakpoint reached")
-        print("line 562 :-D")
 
         three_root_inputs = past_k and past_v and matmul_k is None and "matmul_v" not in locals()
         one_root_input = (

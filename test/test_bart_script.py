@@ -61,9 +61,9 @@ torch.onnx.export(
 )
 print(f"BART encoder exported to {onnx_path}")
 
-optimization_options = FusionOptions("bart")
-# optimization_options.enable_attention = True
 
+optimization_options = FusionOptions("bart")
+optimization_options.enable_attention = True
 
 m = optimizer.optimize_model(
     onnx_path,
