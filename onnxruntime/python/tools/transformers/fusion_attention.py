@@ -889,7 +889,6 @@ class FusionAttention(Fusion):
         normalize_node = node
         start_node = normalize_node
         if normalize_node.op_type == "LayerNormalization":
-            # MB: ok (match Add node before LayerNormalization)
             add_before_layernorm = self.model.match_parent(normalize_node, "Add", 0)
             if add_before_layernorm is not None:
                 start_node = add_before_layernorm
@@ -897,7 +896,6 @@ class FusionAttention(Fusion):
                 return
 
         # SkipLayerNormalization has two inputs, and one of them is the root input for attention.
-        # MB: ok, find last piece of attention mechanism.
         qkv_nodes = self.model.match_parent_path(
             start_node,
             ["Add", "MatMul", "Reshape", "Transpose", "MatMul"],
@@ -905,9 +903,7 @@ class FusionAttention(Fusion):
         )
         einsum_node = None
         if qkv_nodes is not None:
-            # MB, ok. Just unpack
             (_, _, reshape_qkv, transpose_qkv, matmul_qkv) = qkv_nodes
-        # MB, probably not important
         else:
             # Match Albert
             qkv_nodes = self.model.match_parent_path(
@@ -917,7 +913,6 @@ class FusionAttention(Fusion):
                 (_, einsum_node, transpose_qkv, matmul_qkv) = qkv_nodes
             else:
                 return
-        # MB, probably just layer normalization output. Guess there must be exactly one other input.
         other_inputs = []
         for _i, node_input in enumerate(start_node.input):
             if node_input not in output_name_to_node:
@@ -931,7 +926,6 @@ class FusionAttention(Fusion):
 
         root_input = other_inputs[0]
 
-        # MB, probably irrelevant.
         # Match flaubert                     Mask
         #                                     |
         # Mul --> LayerNormalization -->  Attention --> MatMul --> Add
@@ -1101,7 +1095,7 @@ class FusionAttention(Fusion):
                 [
                     (["Mul", "Sub", "Cast", "Unsqueeze", "Unsqueeze"], [None, 0, 1, 0, 0]),
                     (["Mul", "Sub", "Unsqueeze", "Unsqueeze"], [None, 0, 1, 0]),
-
+                    # The following two patterns are for SDPA.
                     (["Where", "Cast", "Sub", "Expand", "Unsqueeze", "Unsqueeze"], [None, 0, 0, 1, 0, 0]),
                     (["Where", "Cast", "Sub", "Cast", "Expand", "Unsqueeze", "Unsqueeze"], [None, 0, 0, 1, 0, 0, 0]),
                 ],
