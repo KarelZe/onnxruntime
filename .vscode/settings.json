@@ -13,7 +13,7 @@
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
         },
-        "editor.defaultFormatter": "charliermarsh.ruff"
+        "editor.defaultFormatter": "ms-python.black-formatter"
     },
     // Enable Python linting and Pylance type checking
     "python.analysis.typeCheckingMode": "basic",
